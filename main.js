@@ -366,10 +366,10 @@ function initThreeJS() {
         if (height > 0) {
             const scale = 1.6 / height;
             gladiatorModelProto.scale.set(scale, scale, scale);
-            // Center the model's feet horizontally and vertically
-            const center = new THREE.Vector3();
-            box.getCenter(center);
-            gladiatorModelProto.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+            // Do NOT use bounding box X and Z center because asymmetrical meshes 
+            // (like a sword sticking out) will offset the physical body from the tile center!
+            // Assume the 3D AI generator centered the character mass at origin (0,0)
+            gladiatorModelProto.position.set(0, -box.min.y * scale, 0);
         }
 
         gladiatorModelProto.traverse((child) => {
@@ -1657,10 +1657,9 @@ function gameLoop(time) {
 
                 // Marching animation while moving!
                 if (p.dirX !== 0 || p.dirY !== 0) {
-                    // Slight bobbing
-                    mesh.position.y = Math.abs(Math.sin(time * 0.015)) * 0.08;
-                    // Lean slightly into the walk
-                    mesh.rotation.z = Math.sin(time * 0.015) * 0.05;
+                    // Firm marching waddle (side-to-side shifting) with very subtle vertical lift
+                    mesh.position.y = Math.abs(Math.sin(time * 0.018)) * 0.02; // drastically reduce hop
+                    mesh.rotation.z = Math.sin(time * 0.012) * 0.12; // increased leaning for waddle
 
                     // Swing arms opposite to each other
                     const armR = mesh.getObjectByName('armR');
