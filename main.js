@@ -1249,17 +1249,20 @@ function updateBotAI(id) {
     let safeDirs = dirs.filter(d => {
         if (p.dirX === -d[0] && p.dirY === -d[1] && (d[0] !== 0 || d[1] !== 0)) return false;
 
-        // Look 1 and 2 cells ahead to be safe from instant death
+        // Look 1, 2, and 3 cells ahead to be safe from instant death at higher speed
         const nx1 = Math.floor(p.x + d[0]);
         const ny1 = Math.floor(p.y + d[1]);
-        const nx2 = Math.floor(p.x + d[0] * 1.8);
-        const ny2 = Math.floor(p.y + d[1] * 1.8);
+        const nx2 = Math.floor(p.x + d[0] * 2.0);
+        const ny2 = Math.floor(p.y + d[1] * 2.0);
+        const nx3 = Math.floor(p.x + d[0] * 3.0);
+        const ny3 = Math.floor(p.y + d[1] * 3.0);
 
         const val1 = getCell(nx1, ny1);
         const val2 = getCell(nx2, ny2);
+        const val3 = getCell(nx3, ny3);
 
-        if (val1 === -1 || val2 === -1) return false; // Wall imminent
-        if (val1 === p.id + 100 || val2 === p.id + 100) return false; // Own trail imminent
+        if (val1 === -1 || val2 === -1 || val3 === -1) return false; // Wall imminent
+        if (val1 === p.id + 100 || val2 === p.id + 100 || val3 === p.id + 100) return false; // Own trail imminent
 
         return true;
     });
@@ -1332,7 +1335,7 @@ function updateBotAI(id) {
             for (const [eId, enemy] of engine.players) {
                 if (eId !== p.id && enemy.isAlive) {
                     const distToEnemy = Math.abs(px - enemy.x) + Math.abs(py - enemy.y);
-                    if (distToEnemy < 8) {
+                    if (distToEnemy < 12) { // Increased distance to 12 for 8.0 speed
                         enemyNear = true;
                         // Avoid them if we are out!
                         const distIfMove = Math.abs((px + d[0]) - enemy.x) + Math.abs((py + d[1]) - enemy.y);
@@ -1344,7 +1347,7 @@ function updateBotAI(id) {
             }
 
             // Look ahead for opportunities / path closing
-            for (let dist = 1; dist < 8; dist++) {
+            for (let dist = 1; dist < 12; dist++) { // Look ahead 12 cells instead of 8
                 const tx = px + d[0] * dist;
                 const ty = py + d[1] * dist;
                 const lookVal = getCell(tx, ty);

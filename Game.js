@@ -146,8 +146,8 @@ export class GameEngine {
             // Process Powerup Collection
             for (let i = this.powerups.length - 1; i >= 0; i--) {
                 const pu = this.powerups[i];
-                // Check continuous distance with a tighter hitbox (0.6 instead of 1.0)
-                if (Math.abs(p.x - pu.x) < 0.6 && Math.abs(p.y - pu.y) < 0.6) {
+                // Check grid cells instead of absolute continuous distance to prevent speed skipping
+                if (currCellX === pu.x && currCellX === pu.x && currCellY === pu.y) {
 
                     let collected = false;
                     if (pu.type === 'crown') {
