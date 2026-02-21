@@ -5,6 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // --- Configuration ---
 const MAP_SIZE = 100; // 100x100 grid cells
@@ -22,6 +23,7 @@ const COLORS = {
 
 let scene, camera, renderer, composer, ssaoPass;
 let engine;
+let gladiatorModelProto = null;
 let textureCanvas, textureContext, mapTexture;
 let baseMapImage;
 let offscreenMapCanvas, offscreenMapContext;
@@ -353,6 +355,49 @@ if (joystickZone && joystickKnob) {
 // --- Functions ---
 
 function initThreeJS() {
+    // Load 3D Asset asynchronously
+    const loader = new GLTFLoader();
+    loader.load('./models/gladiator.glb', (gltf) => {
+        gladiatorModelProto = gltf.scene;
+
+        // Compute bounding box and scale to be roughly 1.6 units tall
+        const box = new THREE.Box3().setFromObject(gladiatorModelProto);
+        const height = box.max.y - box.min.y;
+        if (height > 0) {
+            const scale = 1.6 / height;
+            gladiatorModelProto.scale.set(scale, scale, scale);
+            // Center the model's feet horizontally and vertically
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            gladiatorModelProto.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+        }
+
+        gladiatorModelProto.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+                if (child.material) {
+                    child.material.roughness = 0.5;
+                }
+            }
+        });
+
+        // Hot swap instantly if the game is already running or players exist!
+        if (typeof engine !== 'undefined' && engine && engine.players) {
+            for (const [id, p] of engine.players.entries()) {
+                if (p.isAlive && gladiatorMeshes.has(id)) {
+                    // Find their assigned color
+                    const pMesh = gladiatorMeshes.get(id);
+                    scene.remove(pMesh);
+                    gladiatorMeshes.delete(id);
+
+                    const hex = COLORS[id] ? COLORS[id].hex : (id === 1 ? COLORS[1].hex : 0xffffff);
+                    createGladiator(id, hex);
+                }
+            }
+        }
+    });
+
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB); // Bright Sky Blue
     // Push the fog way back and make it match the sky so the map fades beautifully into the horizon
@@ -655,117 +700,68 @@ function createProps() {
 function createGladiator(id, colorHex) {
     const group = new THREE.Group();
 
-    // Materials
-    const armorMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, metalness: 0.6, roughness: 0.4 });
-    const teamMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.6 });
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xd2b48c }); // Tanned skin
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.9 });
-    const ironMat = new THREE.MeshStandardMaterial({ color: 0xbdc3c7, metalness: 0.9, roughness: 0.2 });
-    const goldMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, metalness: 0.8, roughness: 0.3 });
-
-    // 1. Torso (Lorica Segmentata style)
-    const torsoGeo = new THREE.CylinderGeometry(0.3, 0.25, 0.7, 8);
-    const torso = new THREE.Mesh(torsoGeo, armorMat);
-    torso.position.y = 0.85; // Elevate
-    torso.castShadow = true;
-    group.add(torso);
-
-    // 2. Skirt / pteruges (Team color)
-    const skirtGeo = new THREE.ConeGeometry(0.32, 0.4, 8);
-    const skirt = new THREE.Mesh(skirtGeo, teamMat);
-    skirt.position.y = 0.4;
-    skirt.castShadow = true;
-    group.add(skirt);
-
-    // 3. Head & Helmet (Galea)
-    const headGroup = new THREE.Group();
-    headGroup.position.set(0, 1.35, 0);
-
-    const faceGeo = new THREE.SphereGeometry(0.2, 16, 16);
-    const face = new THREE.Mesh(faceGeo, skinMat);
-    face.castShadow = true;
-    headGroup.add(face);
-
-    // Helmet dome
-    const helmGeo = new THREE.SphereGeometry(0.22, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-    const helm = new THREE.Mesh(helmGeo, armorMat);
-    helm.castShadow = true;
-    headGroup.add(helm);
-
-    // Helmet crest (Crista) - the brush on top
-    const crestGeo = new THREE.BoxGeometry(0.08, 0.25, 0.5);
-    const crest = new THREE.Mesh(crestGeo, teamMat); // Red/team colored brush
-    crest.position.y = 0.3;
-    crest.castShadow = true;
-    headGroup.add(crest);
-
-    // Helmet cheek guards
-    const cheekGeo = new THREE.BoxGeometry(0.05, 0.2, 0.15);
-    const cheekR = new THREE.Mesh(cheekGeo, goldMat);
-    cheekR.position.set(0.2, -0.05, 0.05);
-    const cheekL = new THREE.Mesh(cheekGeo, goldMat);
-    cheekL.position.set(-0.2, -0.05, 0.05);
-    headGroup.add(cheekR);
-    headGroup.add(cheekL);
-
-    group.add(headGroup);
-
-    // 4. Arms & Weapons
-    // Right Arm (Sword - Gladius)
-    const armGeo = new THREE.CylinderGeometry(0.08, 0.06, 0.5);
-    const armR = new THREE.Mesh(armGeo, skinMat);
-    armR.name = 'armR';
-    armR.position.set(0.4, 0.8, 0);
-    armR.rotation.z = -Math.PI / 6; // Angled out
-    armR.castShadow = true;
-
-    // Gladius (Sword)
-    const swordGroup = new THREE.Group();
-    swordGroup.position.set(0.55, 0.6, 0.3);
-    swordGroup.rotation.x = Math.PI / 2; // Pointing forward
-    const hiltGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.15);
-    const hilt = new THREE.Mesh(hiltGeo, woodMat);
-    swordGroup.add(hilt);
-    const bladeGeo = new THREE.BoxGeometry(0.1, 0.6, 0.02);
-    const blade = new THREE.Mesh(bladeGeo, ironMat);
-    blade.position.y = 0.35;
-    swordGroup.add(blade);
-    group.add(armR);
-    group.add(swordGroup);
-
-    // Left Arm (Scutum - Shield)
-    const armL = new THREE.Mesh(armGeo, skinMat);
-    armL.name = 'armL';
-    armL.position.set(-0.4, 0.8, 0.1);
-    armL.rotation.z = Math.PI / 6;
-    armL.rotation.x = -Math.PI / 4; // Holding shield up forward
-    armL.castShadow = true;
-
-    // Scutum (Curved Shield)
-    // We use a cylinder section for a good curve!
-    const betterShieldGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.8, 16, 1, false, 0, Math.PI);
-    const shield = new THREE.Mesh(betterShieldGeo, teamMat); // Team colored shield
-    shield.position.set(-0.35, 0.7, 0.3);
-    // Rotate to orient cylinder properly and present curve forward
-    shield.rotation.y = -Math.PI / 2;
-    shield.castShadow = true;
-
-    // Shield boss (umbo)
-    const bossGeo = new THREE.SphereGeometry(0.1, 8, 8);
-    const boss = new THREE.Mesh(bossGeo, ironMat);
-    boss.position.set(0, 0, 0.3); // Extrude from curved surface center roughly
-    shield.add(boss);
-
-    group.add(armL);
-    group.add(shield);
-
     // 5. Team identifier Ring
-    const ringGeo = new THREE.RingGeometry(0.4, 0.6, 16);
+    const ringGeo = new THREE.RingGeometry(0.5, 0.7, 16);
     const ringMat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.02;
     group.add(ring);
+
+    if (gladiatorModelProto) {
+        // Use the actual 3D model!
+        const model = gladiatorModelProto.clone();
+        // Give it a name so we know not to animate primitive arms
+        model.name = 'real3DModel';
+        group.add(model);
+
+        // Add a colored point light to tint the model with team color since the texture is baked
+        const teamLight = new THREE.PointLight(colorHex, 0.7, 3);
+        teamLight.position.set(0, 2.0, 0);
+        group.add(teamLight);
+    } else {
+        // Fallback to primitive generation
+        const armorMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, metalness: 0.6, roughness: 0.4 });
+        const teamMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.6 });
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xd2b48c });
+        const woodMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.9 });
+        const ironMat = new THREE.MeshStandardMaterial({ color: 0xbdc3c7, metalness: 0.9, roughness: 0.2 });
+        const goldMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, metalness: 0.8, roughness: 0.3 });
+
+        const torsoGeo = new THREE.CylinderGeometry(0.3, 0.25, 0.7, 8);
+        const torso = new THREE.Mesh(torsoGeo, armorMat);
+        torso.position.y = 0.85; torso.castShadow = true;
+        group.add(torso);
+
+        const skirtGeo = new THREE.ConeGeometry(0.32, 0.4, 8);
+        const skirt = new THREE.Mesh(skirtGeo, teamMat);
+        skirt.position.y = 0.4; skirt.castShadow = true;
+        group.add(skirt);
+
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 1.35, 0);
+        const face = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 16), skinMat); face.castShadow = true; headGroup.add(face);
+        const helm = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2), armorMat); helm.castShadow = true; headGroup.add(helm);
+        const crest = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.5), teamMat); crest.position.y = 0.3; crest.castShadow = true; headGroup.add(crest);
+        group.add(headGroup);
+
+        const armGeo = new THREE.CylinderGeometry(0.08, 0.06, 0.5);
+        const armR = new THREE.Mesh(armGeo, skinMat);
+        armR.name = 'armR'; armR.position.set(0.4, 0.8, 0); armR.rotation.z = -Math.PI / 6; armR.castShadow = true;
+
+        const swordGroup = new THREE.Group();
+        swordGroup.position.set(0.55, 0.6, 0.3); swordGroup.rotation.x = Math.PI / 2;
+        swordGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.15), woodMat));
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.02), ironMat); blade.position.y = 0.35; swordGroup.add(blade);
+        group.add(armR); group.add(swordGroup);
+
+        const armL = new THREE.Mesh(armGeo, skinMat);
+        armL.name = 'armL'; armL.position.set(-0.4, 0.8, 0.1); armL.rotation.z = Math.PI / 6; armL.rotation.x = -Math.PI / 4; armL.castShadow = true;
+        const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.8, 16, 1, false, 0, Math.PI), teamMat);
+        shield.position.set(-0.35, 0.7, 0.3); shield.rotation.y = -Math.PI / 2; shield.castShadow = true;
+        const boss = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), ironMat); boss.position.set(0, 0, 0.3); shield.add(boss);
+        group.add(armL); group.add(shield);
+    }
 
     // Scale down a bit to match the 1x1 grid cell nicely
     group.scale.set(0.6, 0.6, 0.6);
