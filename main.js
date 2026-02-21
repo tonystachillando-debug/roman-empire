@@ -150,6 +150,18 @@ if (btnRulesClose) {
     });
 }
 
+if (btnToggleHud) {
+    btnToggleHud.addEventListener('click', () => {
+        if (scoreboardPanel.style.display === 'none') {
+            scoreboardPanel.style.display = '';
+            btnToggleHud.style.opacity = '1';
+        } else {
+            scoreboardPanel.style.display = 'none';
+            btnToggleHud.style.opacity = '0.5';
+        }
+    });
+}
+
 // Pause Menu Buttons
 const btnResume = document.getElementById('btn-resume');
 const btnQuit = document.getElementById('btn-quit');
