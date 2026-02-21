@@ -102,6 +102,12 @@ canvas {
   background: #000;
 }
 
+#minimap {
+  width: 100% !important;
+  height: 100% !important;
+  position: static !important;
+}
+
 .subtitle {
   font-size: 0.5em;
   color: var(--text-light);
