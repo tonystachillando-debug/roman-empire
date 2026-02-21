@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Limes: Roman Frontiers</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+  <!-- Game UI Container -->
+  <div id="ui-layer">
+    <!-- Top HUD -->
+    <div id="hud">
+      <div id="hud-left">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h1 class="roman-title" style="margin:0;">LIMES <span class="subtitle">IO</span></h1>
+          <button id="btn-toggle-hud" class="roman-button small-btn" title="Toggle Leaderboard">👁️</button>
+        </div>
+        <div id="scoreboard">
+          <!-- Dynamically populated by updateLeaderboard -->
+          <div class="score-entry" id="score-player">
+            <div class="color-box" style="background-color: #e74c3c;"></div>
+            <span>Legio I: <span id="percent-player">0.0</span>%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right HUD: Zoom -->
+    <div id="hud-right">
+      <div id="zoom-controls">
+        <button id="btn-zoom-in" class="roman-button small-btn">+</button>
+        <span style="color:var(--gold); font-family:'Cinzel',serif; font-size:0.8em; margin: 4px 0;">ZOOM</span>
+        <button id="btn-zoom-out" class="roman-button small-btn">-</button>
+      </div>
+    </div>
+
+    <!-- Center Screen Popup -->
+    <div id="center-popup" style="display:none;">
+      <span id="popup-icon"></span>
+      <span id="popup-text"></span>
+    </div>
+
+    <!-- Tutorial Overlay -->
+    <div id="tutorial-overlay" style="display:none;">
+      <div id="tutorial-content">
+        <p id="tutorial-text" class="flavor-text">Welcome Emperor. Use WASD to explore outside your borders.</p>
+        <div id="tutorial-keys">
+          <div class="tut-row">
+            <div id="tut-key-w" class="tut-key">W</div>
+          </div>
+          <div class="tut-row">
+            <div id="tut-key-a" class="tut-key">A</div>
+            <div id="tut-key-s" class="tut-key">S</div>
+            <div id="tut-key-d" class="tut-key">D</div>
+          </div>
+          <div class="tut-row" style="margin-top: 15px;">
+            <div id="tut-key-space" class="tut-key space-key" style="display: none;">SPACE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Powerup Inventory -->
+    <div id="inventory">
+      <div id="inv-crown" class="inv-slot" style="display:none;">
+        <span class="inv-icon">👑</span> <span id="inv-crown-count">0</span>
+      </div>
+      <div id="inv-sword" class="inv-slot" style="display:none;">
+        <span class="inv-icon">⚔️</span>
+      </div>
+    </div>
+
+    <!-- Game Over / Start Screen -->
+    <div id="overlay" class="active">
+      <div class="modal">
+        <h1 class="roman-title" id="overlay-title">IMPERIUM</h1>
+        <p class="flavor-text" id="overlay-desc">Conquer the world. Draw your boundaries.</p>
+        <div class="modal-buttons">
+          <button id="btn-start" class="roman-button">START CAMPAIGN</button>
+          <button id="btn-tutorial" class="roman-button">LEARN WAR</button>
+        </div>
+        <div id="desktop-hint" style="margin-top:10px; font-size: 0.8em; color: rgba(255,255,255,0.5);">(OR PRESS R TO
+          START)</div>
+      </div>
+    </div>
+
+    <!-- Rules Screen -->
+    <div id="rules-overlay" style="display:none;" class="active">
+      <div class="modal custom-scrollbar" style="max-width: 650px; max-height:80vh; overflow-y:auto; text-align:left;">
+        <h2 class="roman-title" style="font-size: 2rem; text-align:center; margin-bottom:20px;">RULES OF ENGAGEMENT</h2>
+        <ul style="list-style:none; padding:0; line-height:1.6; color:var(--text-light); font-size:1.1rem;">
+          <li style="margin-bottom:15px;"><b>🏹 CONQUER:</b> Use WASD or Arrows to move outside your territory and draw
+            a trail.</li>
+          <li style="margin-bottom:15px;"><b>🏛️ CLAIM:</b> Return to your solid color territory to capture the enclosed
+            space. Reach 50% map control to win!</li>
+          <li style="margin-bottom:15px;"><b>💀 DEATH:</b> If anyone (even you) touches your active trail before you
+            return home, your empire falls.</li>
+          <li style="margin-bottom:15px;"><b>⚔️ INVASION:</b> You can invade an enemy's solid territory ONLY if your
+            score is <b>strictly greater</b> than theirs (marked by a green <span style="color:#00ff00">🗡️</span>).
+            Entering a stronger enemy's territory is suicide!</li>
+          <li style="margin-bottom:15px;"><b>👑 CROWNS:</b> Grant an extra life. Upon death, you will instantly teleport
+            back to safety within your territory.</li>
+          <li style="margin-bottom:15px;"><b>🗡️ GLADIUS (Sword):</b> Grants a weapon. Press <b>[SPACE BAR]</b> to throw
+            it. It kills enemies instantly or shatters their active trail!</li>
+        </ul>
+        <div style="text-align:center; margin-top:25px;">
+          <button id="btn-rules-close" class="roman-button small-btn">RETURN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pause Menu -->
+    <div id="pause-overlay" style="display: none;">
+      <div class="modal">
+        <h1 class="roman-title">PAUSED</h1>
+        <p class="flavor-text">Take a breath, Emperor.</p>
+        <div class="modal-buttons" style="flex-direction: column; align-items: center; gap: 20px;">
+          <button id="btn-resume" class="roman-button">RESUME</button>
+          <button id="btn-quit" class="roman-button" style="border-color: #e74c3c; color: #e74c3c;">QUIT TO
+            MENU</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Victory Screen -->
+    <div id="victory-overlay">
+      <div class="victory-content">
+        <h1 class="roman-title victory-title">VICTORY</h1>
+        <p class="flavor-text" id="victory-desc">You are the supreme Emperor.</p>
+        <button id="btn-restart-victory" class="roman-button">NEW CAMPAIGN</button>
+      </div>
+      <div id="fireworks-container"></div>
+    </div>
+    <!-- Mobile Controls -->
+    <div id="mobile-controls">
+      <div id="dpad">
+        <button id="btn-up" class="dpad-btn dpad-up">▲</button>
+        <button id="btn-left" class="dpad-btn dpad-left">◀</button>
+        <button id="btn-right" class="dpad-btn dpad-right">▶</button>
+        <button id="btn-down" class="dpad-btn dpad-down">▼</button>
+      </div>
+      <button id="btn-action" class="action-btn">⚔️</button>
+    </div>
+
+  </div>
+
+  <!-- Three.js Canvas -->
+  <script type="module" src="/main.js"></script>
+</body>
+
+</html>
