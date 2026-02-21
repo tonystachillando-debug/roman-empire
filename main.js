@@ -15,10 +15,35 @@ const TEXTURE_SIZE = MAP_SIZE * CELL_PIXELS;
 // Colors mapping: 0=Empty(Fog), 1=Player, 101=Player Trail, 2=Enemy, 102=Enemy Trail
 const COLORS = {
     0: { r: 154, g: 194, b: 120, hex: 0x9abe78 }, // Roman Grass / Tuff
+
+    // Player
     1: { r: 192, g: 57, b: 43, hex: 0xc0392b },  // Roman Red
     101: { r: 231, g: 76, b: 60, hex: 0xe74c3c, alpha: 0.5 }, // Trail Red
+
+    // Enemies
     2: { r: 41, g: 128, b: 185, hex: 0x2980b9 }, // Blue
-    102: { r: 52, g: 152, b: 219, hex: 0x3498db, alpha: 0.5 } // Trail Blue
+    102: { r: 52, g: 152, b: 219, hex: 0x3498db, alpha: 0.5 }, // Trail Blue
+
+    3: { r: 142, g: 68, b: 173, hex: 0x8e44ad }, // Purple
+    103: { r: 155, g: 89, b: 182, hex: 0x9b59b6, alpha: 0.5 },
+
+    4: { r: 39, g: 174, b: 96, hex: 0x27ae60 }, // Green
+    104: { r: 46, g: 204, b: 113, hex: 0x2ecc71, alpha: 0.5 },
+
+    5: { r: 211, g: 84, b: 0, hex: 0xd35400 }, // Orange
+    105: { r: 230, g: 126, b: 34, hex: 0xe67e22, alpha: 0.5 },
+
+    6: { r: 22, g: 160, b: 133, hex: 0x16a085 }, // Teal
+    106: { r: 26, g: 188, b: 156, hex: 0x1abc9c, alpha: 0.5 },
+
+    7: { r: 243, g: 156, b: 18, hex: 0xf39c12 }, // Yellow/Gold
+    107: { r: 241, g: 196, b: 15, hex: 0xf1c40f, alpha: 0.5 },
+
+    8: { r: 44, g: 62, b: 80, hex: 0x2c3e50 }, // Dark Navy
+    108: { r: 52, g: 73, b: 94, hex: 0x34495e, alpha: 0.5 },
+
+    9: { r: 192, g: 57, b: 160, hex: 0xc039a0 }, // Pink
+    109: { r: 231, g: 76, b: 200, hex: 0xe74cc8, alpha: 0.5 },
 };
 
 let scene, camera, renderer, composer, ssaoPass;
@@ -151,15 +176,18 @@ if (btnRulesClose) {
 }
 
 if (btnToggleHud) {
-    btnToggleHud.addEventListener('click', () => {
+    const handleToggle = (e) => {
+        if (e && e.cancelable) e.preventDefault();
         if (scoreboardPanel.style.display === 'none') {
-            scoreboardPanel.style.display = '';
+            scoreboardPanel.style.display = 'flex';
             btnToggleHud.style.opacity = '1';
         } else {
             scoreboardPanel.style.display = 'none';
             btnToggleHud.style.opacity = '0.5';
         }
-    });
+    };
+    btnToggleHud.addEventListener('click', handleToggle);
+    btnToggleHud.addEventListener('touchstart', handleToggle, { passive: false });
 }
 
 // Pause Menu Buttons
