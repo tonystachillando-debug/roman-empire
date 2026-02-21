@@ -750,15 +750,16 @@ canvas {
     top: 5px;
     left: 5px;
     right: auto;
-    transform: scale(0.85);
+    transform: scale(0.65);
+    /* Shrink more to prevent overlap */
     transform-origin: top left;
   }
 
   #scoreboard {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 8px;
-    max-width: 80vw;
+    flex-direction: column;
+    /* Force column layout so they stack instead of wrapping across the screen */
+    gap: 4px;
+    max-width: auto;
   }
 
   #hud-left {
@@ -768,6 +769,12 @@ canvas {
     box-shadow: none !important;
     padding: 8px 10px !important;
     pointer-events: none !important;
+    max-width: 220px;
+  }
+
+  #btn-toggle-hud {
+    pointer-events: auto !important;
+    /* Ensure the button overrides hud-left pointer-events: none */
   }
 
   #hud-right {
