@@ -8,7 +8,7 @@ export class Player {
         this.y = y; // Logical continuous position Y
         this.dirX = dirX; // Movement direction X (-1, 0, 1)
         this.dirY = dirY; // Movement direction Y (-1, 0, 1)
-        this.speed = 4.0; // Grid cells per second
+        this.speed = 8.0; // Grid cells per second
         this.isAlive = true;
         this.score = 0; // Number of cells owned
         this.kills = 0; // Kills tracker for points system
@@ -150,11 +150,11 @@ export class GameEngine {
                 if (Math.abs(p.x - pu.x) < 0.6 && Math.abs(p.y - pu.y) < 0.6) {
 
                     let collected = false;
-                    if (pu.type === 'crown' && p.extraLives < 1) {
+                    if (pu.type === 'crown') {
                         p.extraLives = 1; // Max 1 extra life
                         collected = true;
                     }
-                    else if (pu.type === 'sword' && !p.hasSword) {
+                    else if (pu.type === 'sword') {
                         p.hasSword = true; // Max 1 sword
                         collected = true;
                     }
