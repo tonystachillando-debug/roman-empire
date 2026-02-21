@@ -29,8 +29,11 @@
       </div>
     </div>
 
-    <!-- Right HUD: Zoom -->
+    <!-- Right HUD: Zoom & Map -->
     <div id="hud-right">
+      <div id="minimap-container">
+        <canvas id="minimap" width="120" height="120"></canvas>
+      </div>
       <div id="zoom-controls">
         <button id="btn-zoom-in" class="roman-button small-btn">+</button>
         <span style="color:var(--gold); font-family:'Cinzel',serif; font-size:0.8em; margin: 4px 0;">ZOOM</span>
@@ -137,11 +140,10 @@
     </div>
     <!-- Mobile Controls -->
     <div id="mobile-controls">
-      <div id="dpad">
-        <button id="btn-up" class="dpad-btn dpad-up">▲</button>
-        <button id="btn-left" class="dpad-btn dpad-left">◀</button>
-        <button id="btn-right" class="dpad-btn dpad-right">▶</button>
-        <button id="btn-down" class="dpad-btn dpad-down">▼</button>
+      <div id="joystick-zone">
+        <div id="joystick-base">
+          <div id="joystick-knob"></div>
+        </div>
       </div>
       <button id="btn-action" class="action-btn">⚔️</button>
     </div>

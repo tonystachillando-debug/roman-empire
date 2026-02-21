@@ -126,8 +126,15 @@ export class GameEngine {
             const prevCellX = Math.floor(p.x);
             const prevCellY = Math.floor(p.y);
 
-            p.x += p.dirX * p.speed * dt;
-            p.y += p.dirY * p.speed * dt;
+            // Apply speed malus in enemy territory
+            let currentSpeed = p.speed;
+            const currentCellVal = this.grid[this.getIndex(prevCellX, prevCellY)];
+            if (currentCellVal > 0 && currentCellVal <= 100 && currentCellVal !== p.id) {
+                currentSpeed = p.speed * 0.45; // 55% movement speed reduction in enemy territory!
+            }
+
+            p.x += p.dirX * currentSpeed * dt;
+            p.y += p.dirY * currentSpeed * dt;
 
             // Clamp to map boundaries
             p.x = Math.max(0, Math.min(this.width - 0.01, p.x));
@@ -245,19 +252,10 @@ export class GameEngine {
         }
 
         // 2. Are we entering enemy SOLID territory?
+        // We used to block this if our score was lower. Now everyone can invade anyone, 
+        // but they suffer a speed penalty (handled in update(dt)).
         if (cellVal > 0 && cellVal <= 100 && cellVal !== p.id) {
-            const enemyId = cellVal;
-            const enemy = this.players.get(enemyId);
-            if (enemy) {
-                const myScore = (p.score * 10) + (p.kills * 1000);
-                const enemyScore = (enemy.score * 10) + (enemy.kills * 1000);
-
-                // If we don't have strictly more points than them, we die trying to enter!
-                if (myScore <= enemyScore) {
-                    this.killPlayer(p.id, updates, enemyId);
-                    return;
-                }
-            }
+            // Speed penalty applied elsewhere.
         }
 
         // 3. Are we outside our territory? (Empty space or invadable enemy space)
@@ -280,12 +278,14 @@ export class GameEngine {
     captureTerritory(p, updates) {
         // Simple bounding box of the trail to optimize flood fill
         let minX = this.width, maxX = 0, minY = this.height, maxY = 0;
+        let captureCount = 0; // Track how many tiles we capture in this sweep
 
         // Convert trail to solid territory first
         for (const t of p.currentTrail) {
             this.grid[this.getIndex(t.x, t.y)] = p.id;
             updates.push({ x: t.x, y: t.y, val: p.id });
             p.score++;
+            captureCount++;
 
             if (t.x < minX) minX = t.x;
             if (t.x > maxX) maxX = t.x;
@@ -369,9 +369,15 @@ export class GameEngine {
 
                     this.grid[idx] = p.id;
                     p.score++;
+                    captureCount++;
                     updates.push({ x, y, val: p.id });
                 }
             }
+        }
+
+        // Let main know how many tiles were captured in this single action
+        if (captureCount > 0 && this.onTerritoryCaptured) {
+            this.onTerritoryCaptured(p.id, captureCount);
         }
     }
 

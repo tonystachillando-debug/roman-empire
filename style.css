@@ -76,13 +76,30 @@ canvas {
   pointer-events: auto;
 }
 
-#hud-left,
 #hud-right {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(44, 62, 80, 0.95), rgba(30, 39, 46, 0.95));
+}
+
+#hud-left {
   background: linear-gradient(135deg, rgba(44, 62, 80, 0.95), rgba(30, 39, 46, 0.95));
   border: 2px solid var(--gold);
   padding: 15px 20px;
   border-radius: 6px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(243, 156, 18, 0.15);
+}
+
+#minimap-container {
+  width: 120px;
+  height: 120px;
+  border: 2px solid var(--gold);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+  background: #000;
 }
 
 .subtitle {
@@ -152,6 +169,22 @@ canvas {
   justify-content: center;
   align-items: center;
   padding: 0;
+}
+
+.floating-message {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, 0);
+  font-family: 'Cinzel', serif;
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 0 20px currentColor;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-align: center;
 }
 
 #overlay {
@@ -230,10 +263,16 @@ canvas {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(243, 156, 18, 0.2);
   pointer-events: none;
   /* Ignore clicks when parent is hiding it */
+  transform: scale(0.8) translateY(20px);
+  opacity: 0;
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 #overlay.active .modal,
-#rules-overlay.active .modal {
+#rules-overlay.active .modal,
+#pause-overlay.active .modal {
+  transform: scale(1) translateY(0);
+  opacity: 1;
   pointer-events: all;
 }
 
@@ -320,11 +359,14 @@ canvas {
   box-shadow: 0 0 50px rgba(243, 156, 18, 0.4);
   pointer-events: none;
   /* Inherit click-through when parent hidden */
+  transform: scale(0.8) translateY(20px);
+  transition: all 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 #victory-overlay.active .victory-content,
 #victory-overlay.active .victory-content button {
   pointer-events: all;
+  transform: scale(1) translateY(0);
   /* Re-enable clicks when victory screen is shown */
 }
 
@@ -481,34 +523,43 @@ canvas {
   z-index: 100;
 }
 
-#dpad {
+#joystick-zone {
   position: relative;
-  width: 160px;
-  height: 160px;
-  pointer-events: none;
+  width: 150px;
+  height: 150px;
+  pointer-events: auto;
+  /* Catch touches */
+  touch-action: none;
 }
 
-.dpad-btn {
+#joystick-base {
   position: absolute;
-  pointer-events: auto;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  background: rgba(44, 62, 80, 0.4);
+  border: 2px solid rgba(243, 156, 18, 0.6);
+  border-radius: 50%;
+  backdrop-filter: blur(5px);
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.5), 0 0 15px rgba(243, 156, 18, 0.2);
+}
+
+#joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 60px;
   height: 60px;
-  background: rgba(255, 255, 255, 0.2);
-  border: 2px solid var(--gold);
+  background: rgba(243, 156, 18, 0.8);
+  border: 2px solid white;
   border-radius: 50%;
-  color: var(--gold);
-  font-size: 1.5rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  backdrop-filter: blur(5px);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-}
-
-.dpad-btn:active {
-  background: rgba(243, 156, 18, 0.5);
+  transform: translate(-50%, -50%);
+  /* Start centered */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(255, 255, 255, 0.5);
+  transition: transform 0.1s ease;
+  /* For snapback */
 }
 
 .action-btn {
@@ -655,30 +706,19 @@ canvas {
     transform-origin: top right;
   }
 
-  .dpad-btn {
-    width: 45px;
-    height: 45px;
-    font-size: 1.2rem;
+  #joystick-zone {
+    width: 130px;
+    height: 130px;
   }
 
-  .dpad-up {
-    top: 0;
-    left: 57.5px;
+  #joystick-base {
+    width: 100px;
+    height: 100px;
   }
 
-  .dpad-down {
-    bottom: 0;
-    left: 57.5px;
-  }
-
-  .dpad-left {
-    top: 55px;
-    left: 0;
-  }
-
-  .dpad-right {
-    top: 55px;
-    right: 0;
+  #joystick-knob {
+    width: 50px;
+    height: 50px;
   }
 
   .action-btn {

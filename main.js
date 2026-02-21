@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { GameEngine } from './Game.js';
+import { AudioSynth } from './AudioSynth.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 
 // --- Configuration ---
 const MAP_SIZE = 100; // 100x100 grid cells
@@ -15,7 +20,7 @@ const COLORS = {
     102: { r: 52, g: 152, b: 219, hex: 0x3498db, alpha: 0.5 } // Trail Blue
 };
 
-let scene, camera, renderer;
+let scene, camera, renderer, composer, ssaoPass;
 let engine;
 let textureCanvas, textureContext, mapTexture;
 let baseMapImage;
@@ -40,8 +45,13 @@ const popupText = document.getElementById('popup-text');
 const invCrown = document.getElementById('inv-crown');
 const invCrownCount = document.getElementById('inv-crown-count');
 const invSword = document.getElementById('inv-sword');
+const minimapCanvas = document.getElementById('minimap');
+const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d', { willReadFrequently: true }) : null;
+const sfx = new AudioSynth();
 
 let popupTimeout;
+const displayScores = new Map();
+
 function showCenterPopup(icon, text) {
     if (!centerPopup) return;
     popupIcon.innerText = icon;
@@ -56,6 +66,25 @@ function showCenterPopup(icon, text) {
         centerPopup.style.display = 'none';
         centerPopup.classList.remove('popup-anim');
     }, 2500);
+}
+
+function showFloatingMessage(text, color = "#ffffff") {
+    const msg = document.createElement('div');
+    msg.className = 'floating-message';
+    msg.innerText = text;
+    msg.style.color = color;
+    document.body.appendChild(msg);
+
+    // Trigger reflow for animation
+    void msg.offsetWidth;
+    msg.style.opacity = '1';
+    msg.style.transform = 'translate(-50%, -50px)'; // move up a bit
+
+    setTimeout(() => {
+        msg.style.opacity = '0';
+        msg.style.transform = 'translate(-50%, -80px)';
+        setTimeout(() => msg.remove(), 500); // wait for fade out
+    }, 2000); // stay on screen for 2s
 }
 
 // Input state
@@ -213,35 +242,113 @@ window.addEventListener('keyup', (e) => {
 window.addEventListener('resize', onWindowResize);
 
 // Mobile Controls wiring
-const mobileButtons = {
-    'btn-up': 'w',
-    'btn-down': 's',
-    'btn-left': 'a',
-    'btn-right': 'd',
-    'btn-action': ' '
-};
-
-Object.entries(mobileButtons).forEach(([btnId, keyName]) => {
-    const btn = document.getElementById(btnId);
-    if (!btn) return;
-
-    const handlePress = (e) => {
-        e.preventDefault(); // Prevent double-firing from mouse+touch
-        keys[keyName] = true;
-    };
-
-    const handleRelease = (e) => {
+// Mobile Action Button
+const btnAction = document.getElementById('btn-action');
+if (btnAction) {
+    const handleActionPress = (e) => {
         e.preventDefault();
-        keys[keyName] = false;
-        if (keyName === ' ') spacePressed = false;
+        keys[' '] = true;
+    };
+    const handleActionRelease = (e) => {
+        e.preventDefault();
+        keys[' '] = false;
+        spacePressed = false;
+    };
+    btnAction.addEventListener('touchstart', handleActionPress, { passive: false });
+    btnAction.addEventListener('touchend', handleActionRelease, { passive: false });
+    btnAction.addEventListener('mousedown', handleActionPress);
+    btnAction.addEventListener('mouseup', handleActionRelease);
+    btnAction.addEventListener('mouseleave', handleActionRelease);
+}
+
+// Virtual Joystick
+const joystickZone = document.getElementById('joystick-zone');
+const joystickKnob = document.getElementById('joystick-knob');
+let joystickActive = false;
+let joystickCenter = { x: 0, y: 0 };
+const maxRadius = 35; // How far the knob can move
+
+if (joystickZone && joystickKnob) {
+    const handleJoyStart = (e) => {
+        e.preventDefault();
+        joystickActive = true;
+        const rect = joystickZone.getBoundingClientRect();
+        joystickCenter = {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+        };
+        joystickKnob.style.transition = 'none';
+        handleJoyMove(e);
     };
 
-    btn.addEventListener('touchstart', handlePress, { passive: false });
-    btn.addEventListener('touchend', handleRelease, { passive: false });
-    btn.addEventListener('mousedown', handlePress);
-    btn.addEventListener('mouseup', handleRelease);
-    btn.addEventListener('mouseleave', handleRelease);
-});
+    const handleJoyMove = (e) => {
+        if (!joystickActive) return;
+        e.preventDefault();
+
+        let clientX, clientY;
+        if (e.type.includes('touch')) {
+            clientX = e.targetTouches[0].clientX;
+            clientY = e.targetTouches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+
+        let dx = clientX - joystickCenter.x;
+        let dy = clientY - joystickCenter.y;
+
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance > maxRadius) {
+            dx = (dx / distance) * maxRadius;
+            dy = (dy / distance) * maxRadius;
+        }
+
+        joystickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+        // Reset movement keys
+        keys.w = false; keys.s = false; keys.a = false; keys.d = false;
+
+        // Apply movement if outside deadzone
+        if (distance > 10) {
+            const angle = Math.atan2(dy, dx);
+            // -PI to PI
+            // Angle mapping:
+            // Right: -pi/4 to pi/4
+            // Down: pi/4 to 3pi/4
+            // Left: 3pi/4 to pi OR -pi to -3pi/4
+            // Up: -3pi/4 to -pi/4
+
+            if (angle > -Math.PI / 4 && angle <= Math.PI / 4) {
+                keys.d = true;
+            } else if (angle > Math.PI / 4 && angle <= 3 * Math.PI / 4) {
+                keys.s = true;
+            } else if (angle < -Math.PI / 4 && angle >= -3 * Math.PI / 4) {
+                keys.w = true;
+            } else {
+                keys.a = true;
+            }
+        }
+    };
+
+    const handleJoyEnd = (e) => {
+        e.preventDefault();
+        joystickActive = false;
+        joystickKnob.style.transition = 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+        joystickKnob.style.transform = 'translate(-50%, -50%)';
+        keys.w = false; keys.s = false; keys.a = false; keys.d = false;
+    };
+
+    joystickZone.addEventListener('touchstart', handleJoyStart, { passive: false });
+    joystickZone.addEventListener('touchmove', handleJoyMove, { passive: false });
+    joystickZone.addEventListener('touchend', handleJoyEnd, { passive: false });
+    joystickZone.addEventListener('touchcancel', handleJoyEnd, { passive: false });
+
+    // Mouse fallback
+    joystickZone.addEventListener('mousedown', handleJoyStart);
+    window.addEventListener('mousemove', handleJoyMove, { passive: false });
+    window.addEventListener('mouseup', handleJoyEnd);
+}
 
 // --- Functions ---
 
@@ -273,6 +380,23 @@ function initThreeJS() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
     document.body.appendChild(renderer.domElement);
+
+    // Post-Processing
+    const renderScene = new RenderPass(scene, camera);
+    ssaoPass = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
+    ssaoPass.kernelRadius = 16;
+    ssaoPass.minDistance = 0.005;
+    ssaoPass.maxDistance = 0.1;
+
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+    bloomPass.threshold = 0.6; // Only bloom bright colors
+    bloomPass.strength = 0.8; // subtle
+    bloomPass.radius = 0.5;
+
+    composer = new EffectComposer(renderer);
+    composer.addPass(renderScene);
+    composer.addPass(ssaoPass);
+    composer.addPass(bloomPass);
 
     // Lighting - Bright Day
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
@@ -689,8 +813,10 @@ function startGame() {
 
     // Hook up engine events
     engine.onCellsUpdated = (updates) => {
+        let playerCaptured = false;
         // Draw to 2D canvas texture
         for (const u of updates) {
+            if (u.val === 1) playerCaptured = true;
             const px = u.x * CELL_PIXELS;
             // Texture canvas Y goes down. Our grid Y goes up/down depending on mapping.
             // PlaneGeometry maps top-left of image to top-left of plane(X:- Y:+) by default if we don't flip.
@@ -724,11 +850,85 @@ function startGame() {
             }
         }
         mapTexture.needsUpdate = true;
+        if (playerCaptured) sfx.playCapture();
     };
 
+    engine.onTerritoryCaptured = (pid, count) => {
+        if (pid === 1) {
+            let message = "";
+            let color = "#ffffff";
+            if (count > 30) {
+                message = `AVE CAESAR! (+${count})`;
+                color = "#f1c40f"; // Gold
+            } else if (count >= 20) {
+                message = `AMAZING WORK (+${count})`;
+                color = "#3498db"; // Blue
+            } else if (count >= 10) {
+                message = `WELL DONE PRAETORIAN (+${count})`;
+                color = "#2ecc71"; // Green
+            }
+
+            if (message) {
+                showFloatingMessage(message, color);
+            }
+        }
+    };
+
+    function createExplosion(position, colorHex, particleCount = 20) {
+        const material = new THREE.MeshStandardMaterial({
+            color: colorHex,
+            emissive: colorHex,
+            emissiveIntensity: 0.8
+        });
+        const particleGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+
+        for (let i = 0; i < particleCount; i++) {
+            const particle = new THREE.Mesh(particleGeo, material);
+            particle.position.copy(position);
+
+            // Random explosion velocity (burst outward and up)
+            particle.userData.velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 10,
+                (Math.random() * 8) + 4,
+                (Math.random() - 0.5) * 10
+            );
+            // Random spin
+            particle.userData.rotationSpeed = new THREE.Vector3(
+                (Math.random() - 0.5) * 0.4,
+                (Math.random() - 0.5) * 0.4,
+                (Math.random() - 0.5) * 0.4
+            );
+
+            scene.add(particle);
+
+            // Simple physics loop for particle
+            const animateParticle = () => {
+                if (particle.position.y < -1) {
+                    scene.remove(particle);
+                    return;
+                }
+                particle.position.addScaledVector(particle.userData.velocity, 0.016);
+                particle.userData.velocity.y -= 15 * 0.016; // Gravity
+
+                particle.rotation.x += particle.userData.rotationSpeed.x;
+                particle.rotation.y += particle.userData.rotationSpeed.y;
+                particle.rotation.z += particle.userData.rotationSpeed.z;
+
+                // Shrink over time
+                particle.scale.multiplyScalar(0.95);
+
+                requestAnimationFrame(animateParticle);
+            };
+            animateParticle();
+        }
+    }
+
     engine.onPlayerDied = (pid) => {
+        if (pid === 1) sfx.playDeath();
         const mesh = gladiatorMeshes.get(pid);
         if (mesh) {
+            // Create blood/team-color explosion where they died
+            createExplosion(mesh.position, COLORS[pid].hex, 30);
             scene.remove(mesh);
             gladiatorMeshes.delete(pid);
         }
@@ -839,6 +1039,7 @@ function startGame() {
     };
 
     engine.onProjectileSpawned = (proj) => {
+        if (proj.ownerId === 1) sfx.playSword();
         const mesh = new THREE.Group();
         const silver = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xbdc3c7, metalness: 1.0 });
 
@@ -1126,18 +1327,9 @@ function updateBotAI(id) {
                     score += 500 / dist;
                 }
 
-                // Slight penalty for running into other people's solid territory unless necessary (except player)
+                // Slight penalty for running into other people's solid territory as it slows you down
                 if (lookVal > 0 && lookVal <= 100 && lookVal !== p.id) {
-                    const enemyP = engine.players.get(lookVal);
-                    if (enemyP) {
-                        const myScore = (p.score * 10) + (p.kills * 1000);
-                        const enemyScore = (enemyP.score * 10) + (enemyP.kills * 1000);
-                        if (myScore > enemyScore) {
-                            score += 5; // Tasty weak enemy
-                        } else {
-                            score -= 200; // DO NOT ENTER, SUICIDE!
-                        }
-                    }
+                    score -= 10;
                 }
             }
 
@@ -1263,6 +1455,26 @@ function updateLeaderboard(time) {
     if (time - lastLeaderboardUpdate < 500) return; // limit to twice a second
     lastLeaderboardUpdate = time;
 
+    // Update Minimap
+    if (minimapCtx && textureCanvas) {
+        minimapCtx.drawImage(textureCanvas, 0, 0, minimapCanvas.width, minimapCanvas.height);
+
+        // Draw player dot
+        if (engine.players.has(1) && engine.players.get(1).isAlive) {
+            const p = engine.players.get(1);
+            const mx = (p.x / MAP_SIZE) * minimapCanvas.width;
+            // The texture canvas maps Y backwards from screen
+            const my = (1 - (p.y / MAP_SIZE)) * minimapCanvas.height;
+            minimapCtx.fillStyle = '#ffffff';
+            minimapCtx.beginPath();
+            minimapCtx.arc(mx, my, 3, 0, Math.PI * 2);
+            minimapCtx.fill();
+            minimapCtx.strokeStyle = '#000000';
+            minimapCtx.lineWidth = 1;
+            minimapCtx.stroke();
+        }
+    }
+
     const totalCells = MAP_SIZE * MAP_SIZE;
     let scores = [];
     const playerP = engine.players.get(1);
@@ -1272,16 +1484,12 @@ function updateLeaderboard(time) {
         if (p.isAlive) {
             const rawScore = (p.score * 10) + (p.kills * 1000);
 
-            // Check if player 1 can invade this enemy (must have more points)
-            const isInvadable = (id !== 1 && playerScore > rawScore);
-
             scores.push({
                 id: id,
                 name: playerNames.get(id),
                 score: rawScore,
                 pct: (p.score / totalCells) * 100,
-                color: `#${COLORS[id].hex.toString(16).padStart(6, '0')}`,
-                isInvadable: isInvadable
+                color: `#${COLORS[id].hex.toString(16).padStart(6, '0')}`
             });
         }
     }
@@ -1298,17 +1506,13 @@ function updateLeaderboard(time) {
 
         let invadableStyle = '';
         let invadableIcon = '';
-        if (s.isInvadable) {
-            invadableStyle = ' border-right: 3px solid #00ff00;';
-            invadableIcon = '<span style="color:#00ff00; font-size:0.8em; margin-right: 5px;" title="Invadable!">🗡️</span>';
-        }
 
         html += `
             <div class="score-entry ${s.id === 1 ? 'is-player' : ''}" style="${invadableStyle}">
                 <div class="color-box" style="background-color: ${s.color};"></div>
                 <div style="flex-grow: 1;">${i + 1}. ${s.name} ${invadableIcon}</div>
-                <div style="text-align: right;">
-                    <div style="font-size: 0.9em;">${s.score.toLocaleString()} pts</div>
+                <div style="text-align: right;" class="score-text-container">
+                    <div style="font-size: 0.9em; transition: all 0.1s ease;" id="score-val-${s.id}">${Math.floor(displayScores.get(s.id) || s.score).toLocaleString()} pts</div>
                     <div style="font-size: 0.7em; color: rgba(255,255,255,0.6);">${s.pct.toFixed(2)}%</div>
                 </div>
             </div>
@@ -1497,6 +1701,46 @@ function gameLoop(time) {
         }
     }
 
+    // Smooth Score Animation Loop
+    for (const [id, p] of engine.players) {
+        if (!p.isAlive) {
+            displayScores.delete(id);
+            continue;
+        }
+        const realScore = (p.score * 10) + (p.kills * 1000);
+        let currDisp = displayScores.get(id);
+        if (currDisp === undefined) {
+            currDisp = realScore;
+            displayScores.set(id, currDisp);
+        }
+
+        if (Math.abs(currDisp - realScore) > 1) {
+            const diff = realScore - currDisp;
+            if (Math.abs(diff) < 2) currDisp = realScore;
+            else currDisp += diff * 0.1; // Smooth interpolate 10% each frame
+
+            displayScores.set(id, currDisp);
+
+            // Only update DOM if the element currently exists
+            const el = document.getElementById('score-val-' + id);
+            if (el) {
+                el.innerText = Math.floor(currDisp).toLocaleString() + ' pts';
+
+                // Add a little CSS pop effect if it's the player and they gained score
+                if (id === 1 && diff > 10) {
+                    el.style.transform = 'scale(1.1)';
+                    el.style.color = '#f1c40f'; // highlight gold
+                    setTimeout(() => {
+                        if (el) {
+                            el.style.transform = 'scale(1)';
+                            el.style.color = '';
+                        }
+                    }, 50);
+                }
+            }
+        }
+    }
+
     // Animate Powerups
     for (const [id, mesh] of powerupMeshes) {
         mesh.rotation.y += 0.05;
@@ -1519,7 +1763,7 @@ function gameLoop(time) {
 
     updateLeaderboard(time);
 
-    renderer.render(scene, camera);
+    composer.render();
 }
 
 function onWindowResize() {
@@ -1533,6 +1777,12 @@ function onWindowResize() {
     camera.updateProjectionMatrix();
 
     renderer.setSize(window.innerWidth, window.innerHeight);
+    if (composer) {
+        composer.setSize(window.innerWidth, window.innerHeight);
+    }
+    if (ssaoPass) {
+        ssaoPass.setSize(window.innerWidth, window.innerHeight);
+    }
 }
 
 // --- Tutorial Logic ---
@@ -1664,7 +1914,7 @@ function checkTutorialLogic(dt) {
 // Initial render call to show empty map before start
 function initialRender() {
     if (!isGameRunning) {
-        renderer.render(scene, camera);
+        composer.render();
         requestAnimationFrame(initialRender);
     }
 }
